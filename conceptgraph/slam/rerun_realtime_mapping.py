@@ -173,21 +173,23 @@ def main(cfg : DictConfig):
         det_exp_path.mkdir(parents=True, exist_ok=True)
 
         ## Initialize the detection models
+        # SAM-L + CLIP ViT-H + YOLO-World L together OOM on 8GB laptops.
+        # MobileSAM is the recommended Ultralytics fallback in this repo.
         detection_model = measure_time(YOLO)('yolov8l-world.pt')
-        sam_predictor = SAM('sam_l.pt') # SAM('mobile_sam.pt') # UltraLytics SAM
-        # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
+        sam_predictor = SAM('mobile_sam.pt')
         clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
             "ViT-H-14", "laion2b_s32b_b79k"
         )
-        clip_model = clip_model.to(cfg.device)
+        clip_model = clip_model.eval().to(cfg.device)
         clip_tokenizer = open_clip.get_tokenizer("ViT-H-14")
+        torch.cuda.empty_cache()
 
         # Set the classes for the detection model
         detection_model.set_classes(obj_classes.get_classes_arr())
     else:
         print("\n".join(["NOT Running detections..."] * 10))
 
-    openai_client = get_openai_client()
+    # openai_client = get_openai_client()
 
     save_hydra_config(cfg, exp_out_path)
     save_hydra_config(detections_exp_cfg, exp_out_path, is_detection_config=True)
@@ -252,6 +254,7 @@ def main(cfg : DictConfig):
             # Get Masks Using SAM or MobileSAM
             # UltraLytics SAM
             if xyxy_tensor.numel() != 0:
+                torch.cuda.empty_cache()
                 sam_out = sam_predictor.predict(color_path, bboxes=xyxy_tensor, verbose=False)
                 masks_tensor = sam_out[0].masks.data
 
@@ -268,7 +271,9 @@ def main(cfg : DictConfig):
             )
             
             # Make the edges
-            labels, edges, edge_image, captions = make_vlm_edges_and_captions(image, curr_det, obj_classes, detection_class_labels, det_exp_vis_path, color_path, cfg.make_edges, openai_client)
+            #labels, edges, edge_image, captions = make_vlm_edges_and_captions(image, curr_det, obj_classes, detection_class_labels, det_exp_vis_path, color_path, cfg.make_edges, openai_client)
+            labels, edges, edge_image, captions = make_vlm_edges_and_captions(image, curr_det, obj_classes, detection_class_labels, det_exp_vis_path, color_path, False, None)
+
 
             image_crops, image_feats, text_feats = compute_clip_features_batched(
                 image_rgb, curr_det, clip_model, clip_preprocess, clip_tokenizer, obj_classes.get_classes_arr(), cfg.device)
@@ -583,11 +588,9 @@ def main(cfg : DictConfig):
                 })
     # LOOP OVER -----------------------------------------------------
     
-    # Consolidate captions 
+    # Consolidate captions (skipped when OpenAI is not used)
     for object in objects:
-        obj_captions = object['captions'][:20]
-        consolidated_caption = consolidate_captions(openai_client, obj_captions)
-        object['consolidated_caption'] = consolidated_caption
+        object['consolidated_caption'] = ""
 
     handle_rerun_saving(cfg.use_rerun, cfg.save_rerun, cfg.exp_suffix, exp_out_path)
 

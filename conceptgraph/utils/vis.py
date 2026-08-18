@@ -219,7 +219,6 @@ def vis_result_fast_on_depth(
     )
     mask_annotator = sv.MaskAnnotator(
         color = color,
-        opacity=0.2,
     )
 
     if hasattr(detections, 'confidence') and hasattr(detections, 'class_id'):
@@ -242,7 +241,7 @@ def vis_result_fast_on_depth(
         detections = dataclasses.replace(detections)
         detections.class_id = np.arange(len(detections))
         
-    annotated_image = mask_annotator.annotate(scene=depth_image.copy(), detections=detections)
+    annotated_image = mask_annotator.annotate(scene=depth_image.copy(), detections=detections, opacity=0.2)
     
     if draw_bbox:
         annotated_image = box_annotator.annotate(scene=annotated_image, detections=detections, labels=labels)
@@ -314,9 +313,9 @@ def old_filter_detections(
 class CustomBoxAnnotator(sv.BoxAnnotator):
     def __init__(
         self,
-        color: Union[Color, ColorPalette] = ColorPalette.DEFAULT,
+        color: Union[Color, ColorPalette] = ColorPalette.default(),
         thickness: int = 2,
-        text_color: Color = Color.BLACK,
+        text_color: Color = Color.black(),
         text_scale: float = 0.5,
         text_thickness: int = 1,
         text_padding: int = 10,
