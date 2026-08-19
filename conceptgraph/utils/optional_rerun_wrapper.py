@@ -30,11 +30,19 @@ class OptionalReRun:
     def __getattr__(self, name):
         def method(*args, **kwargs):
             if self._config_use_rerun and self._rerun:
-                func = getattr(self._rerun, name, None)
+                rr = self._rerun
+                # Rerun 0.36 renamed these; keep ConceptGraphs call sites working.
+                if name == "set_time_sequence":
+                    timeline, sequence = args[0], args[1]
+                    return rr.set_time(timeline, sequence=sequence)
+                if name == "ImageEncoded":
+                    path = kwargs.get("path", args[0] if args else None)
+                    return rr.EncodedImage(path=path)
+                func = getattr(rr, name, None)
                 if func:
                     return func(*args, **kwargs)
                 else:
-                    logging.debug(f"'{name}' is not a valid rerun method.")
+                    logging.warning(f"'{name}' is not a valid rerun method.")
             else:
                 if not self._config_use_rerun:
                     logging.debug(f"Skipping optional rerun call to '{name}' because rerun usage is disabled.")
@@ -60,15 +68,20 @@ def orr_log_camera(intrinsics, adjusted_pose, prev_adjusted_pose, img_width, img
             resolution=resolution,
             focal_length=focal_length,
             principal_point=principal_point,
+            image_plane_distance=0.15,
         )
     )
 
     # Convert the current adjusted pose to translation and quaternion for logging
     translation = adjusted_pose[:3, 3].tolist()
-    quaternion = rotation_matrix_to_quaternion(adjusted_pose[:3, :3])
+    rotation_mat = np.asarray(adjusted_pose[:3, :3], dtype=np.float64)
     orr.log(
         "world/camera",
-        orr.Transform3D(translation=translation, rotation=quaternion, from_parent=False)
+        orr.Transform3D(
+            translation=translation,
+            mat3x3=rotation_mat,
+            from_parent=False,
+        )
     )
 
     # Log trajectory if not the first frame
@@ -88,11 +101,9 @@ def orr_log_camera(intrinsics, adjusted_pose, prev_adjusted_pose, img_width, img
     return prev_adjusted_pose
         
 def orr_log_rgb_image(color_path):
-    # Log RGB image from the specified path
-    color_path = color_path
     orr.log(
-        "world/camera/rgb_image_encoded",
-        orr.ImageEncoded(path=str(color_path))
+        "world/camera/rgb",
+        orr.EncodedImage(path=str(color_path))
     )
     
 def orr_log_depth_image(depth_tensor):
@@ -119,14 +130,14 @@ def orr_log_annotated_image(color_path, det_exp_vis_path):
     if existing_vis_save_path:
         orr.log(
             "world/camera/rgb_image_annotated",
-            orr.ImageEncoded(path=existing_vis_save_path)
+            orr.EncodedImage(path=existing_vis_save_path)
         )
 
 def orr_log_vlm_image(vlm_image_path, label=""):
     if os.path.exists(vlm_image_path):
         orr.log(
             f"world/camera/vlm_image_{label}",
-            orr.ImageEncoded(path=vlm_image_path)
+            orr.EncodedImage(path=vlm_image_path)
         )
     else:
         logging.warning(f"VLM image not found at path: {vlm_image_path}")

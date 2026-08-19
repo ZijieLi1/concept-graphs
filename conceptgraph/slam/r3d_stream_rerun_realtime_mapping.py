@@ -194,7 +194,7 @@ def main(cfg : DictConfig):
     for frame_idx in trange(total_frames):
         tracker.curr_frame_idx = frame_idx
         counter+=1
-        orr.set_time_sequence("frame", frame_idx)
+        orr.set_time("frame", sequence=frame_idx)
 
         # Check if we should exit early only if the flag hasn't been set yet
         if not exit_early_flag and should_exit_early(cfg.exit_early_file):
