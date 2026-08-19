@@ -21,7 +21,6 @@ from open3d.io import read_pinhole_camera_parameters
 import hydra
 from omegaconf import DictConfig
 import open_clip
-from ultralytics import YOLO, SAM
 import supervision as sv
 from collections import Counter
 
@@ -96,6 +95,7 @@ from conceptgraph.slam.mapping import (
 )
 from conceptgraph.utils.model_utils import compute_clip_features_batched
 from conceptgraph.utils.general_utils import get_vis_out_path, cfg_to_dict, check_run_detections
+from conceptgraph.utils.detector_backends import init_detector, run_detector
 
 
 # Disable torch gradient computation
@@ -167,25 +167,25 @@ def main(cfg : DictConfig):
     det_exp_vis_path = get_vis_out_path(det_exp_path)
     
     prev_adjusted_pose = None
+    detection_model = None
+    sam_predictor = None
+    detector_backend = str(cfg.detector)
 
     if run_detections:
         print("\n".join(["Running detections..."] * 10))
         det_exp_path.mkdir(parents=True, exist_ok=True)
 
-        ## Initialize the detection models
-        # SAM-L + CLIP ViT-H + YOLO-World L together OOM on 8GB laptops.
-        # MobileSAM is the recommended Ultralytics fallback in this repo.
-        detection_model = measure_time(YOLO)('yolov8l-world.pt')
-        sam_predictor = SAM('mobile_sam.pt')
+        detector_backend, detection_model, sam_predictor, detector_class_names = init_detector(
+            cfg, obj_classes.get_classes_arr()
+        )
+        if detector_backend != "yoloe":
+            obj_classes.set_class_list(detector_class_names)
         clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
             "ViT-H-14", "laion2b_s32b_b79k"
         )
         clip_model = clip_model.eval().to(cfg.device)
         clip_tokenizer = open_clip.get_tokenizer("ViT-H-14")
         torch.cuda.empty_cache()
-
-        # Set the classes for the detection model
-        detection_model.set_classes(obj_classes.get_classes_arr())
     else:
         print("\n".join(["NOT Running detections..."] * 10))
 
@@ -242,25 +242,18 @@ def main(cfg : DictConfig):
             image = cv2.imread(str(color_path)) # This will in BGR color space
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-            # Do initial object detection
-            results = detection_model.predict(color_path, conf=0.1, verbose=False)
-            confidences = results[0].boxes.conf.cpu().numpy()
-            detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(int)
-            detection_class_labels = [f"{obj_classes.get_classes_arr()[class_id]} {class_idx}" for class_idx, class_id in enumerate(detection_class_ids)]
-            xyxy_tensor = results[0].boxes.xyxy
-            xyxy_np = xyxy_tensor.cpu().numpy()
-
-            # if there are detections,
-            # Get Masks Using SAM or MobileSAM
-            # UltraLytics SAM
-            if xyxy_tensor.numel() != 0:
-                torch.cuda.empty_cache()
-                sam_out = sam_predictor.predict(color_path, bboxes=xyxy_tensor, verbose=False)
-                masks_tensor = sam_out[0].masks.data
-
-                masks_np = masks_tensor.cpu().numpy()
-            else:
-                masks_np = np.empty((0, *color_tensor.shape[:2]), dtype=np.float64)
+            xyxy_np, confidences, detection_class_ids, masks_np = run_detector(
+                detector_backend,
+                detection_model,
+                sam_predictor,
+                color_path,
+                color_tensor.shape[:2],
+                cfg.detection_conf,
+            )
+            detection_class_labels = [
+                f"{obj_classes.get_classes_arr()[class_id]} {class_idx}"
+                for class_idx, class_id in enumerate(detection_class_ids)
+            ]
 
             # Create a detections object that we will save later
             curr_det = sv.Detections(

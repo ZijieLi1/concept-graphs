@@ -627,6 +627,13 @@ class ObjectClasses:
 
         return classes, class_to_color
 
+    def set_class_list(self, classes):
+        """Replace the class list, e.g. after loading YOLO11 or prompt-free YOLOE names."""
+        self.classes = list(classes)
+        for class_name in self.classes:
+            if class_name not in self.class_to_color:
+                self.class_to_color[class_name] = list(np.random.rand(3).tolist())
+
     def get_classes_arr(self):
         """
         Returns the list of class names, excluding background classes if configured to do so.

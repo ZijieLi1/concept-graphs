@@ -1,0 +1,11 @@
+# Detection backend: yolo11_sam | yoloe | yoloe_pf
+#   yolo11_sam : YOLO11 boxes + SAM masks (closed-vocab COCO)
+#   yoloe      : YOLOE-seg with text prompts from classes_file (ScanNet200)
+#   yoloe_pf   : YOLOE prompt-free, built-in LVIS/Objects365 vocabulary
+detector: yoloe_pf
+
+yolo11_weights: yolo11l.pt
+sam_weights: mobile_sam.pt
+yoloe_weights: yoloe-11l-seg.pt
+yoloe_pf_weights: yoloe-11m-seg-pf.pt
+detection_conf: 0.1

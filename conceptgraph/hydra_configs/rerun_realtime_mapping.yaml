@@ -5,6 +5,7 @@ defaults:
   # - record3d
   - sam
   - classes
+  - detector
   - logging_level
   - _self_
 
@@ -12,6 +13,9 @@ defaults:
 detections_exp_suffix: s_detections_stride10 # helpful label to identify your detections
 force_detection: !!bool True
 save_detections: !!bool True
+
+# Detection backend: yolo11_sam | yoloe | yoloe_pf
+detector: yoloe_pf
 
 make_edges: !!bool True
 
