@@ -6,6 +6,7 @@ The script is used to model Grounded SAM detections in 3D, it assumes the tag2te
 import os
 import copy
 import uuid
+import time
 from pathlib import Path
 import pickle
 import gzip
@@ -200,7 +201,18 @@ def main(cfg : DictConfig):
 
     exit_early_flag = False
     counter = 0
+    loop_start_time = time.time()
+    frame_times = []
+
+    def log_frame_timing(frame_idx, frame_start_time):
+        frame_time_s = time.time() - frame_start_time
+        fps = 1.0 / frame_time_s if frame_time_s > 0 else 0.0
+        frame_times.append(frame_time_s)
+        print(f"Frame {frame_idx}: frame_time_s={frame_time_s:.3f}, fps={fps:.3f}")
+        return frame_time_s, fps
+
     for frame_idx in trange(len(dataset)):
+        frame_start_time = time.time()
         tracker.curr_frame_idx = frame_idx
         counter+=1
         orr.set_time("frame", sequence=frame_idx)
@@ -212,6 +224,7 @@ def main(cfg : DictConfig):
 
         # If exit early flag is set and we're not at the last frame, skip this iteration
         if exit_early_flag and frame_idx < len(dataset) - 1:
+            log_frame_timing(frame_idx, frame_start_time)
             continue
 
         # Read info about current frame from dataset
@@ -331,8 +344,10 @@ def main(cfg : DictConfig):
         orr_log_rgb_image(color_path)
         orr_log_annotated_image(color_path, det_exp_vis_path)
         orr_log_depth_image(depth_tensor)
-        orr_log_vlm_image(vis_save_path_for_vlm)
-        orr_log_vlm_image(vis_save_path_for_vlm_edges, label="w_edges")
+        if os.path.exists(vis_save_path_for_vlm):
+            orr_log_vlm_image(vis_save_path_for_vlm)
+        if os.path.exists(vis_save_path_for_vlm_edges):
+            orr_log_vlm_image(vis_save_path_for_vlm_edges, label="w_edges")
 
         # resize the observation if needed
         resized_gobs = resize_gobs(raw_gobs, image_rgb)
@@ -348,6 +363,7 @@ def main(cfg : DictConfig):
         gobs = filtered_gobs
 
         if len(gobs['mask']) == 0: # no detections in this frame
+            log_frame_timing(frame_idx, frame_start_time)
             continue
 
         # this helps make sure things like pillows on couches are separate objects
@@ -384,6 +400,7 @@ def main(cfg : DictConfig):
         )
 
         if len(detection_list) == 0: # no detections, skip
+            log_frame_timing(frame_idx, frame_start_time)
             continue
 
         # if no objects yet in the map,
@@ -396,6 +413,7 @@ def main(cfg : DictConfig):
                     "total_objects_so_far": tracker.get_total_objects(),
                     "objects_this_frame": len(detection_list),
                 })
+            log_frame_timing(frame_idx, frame_start_time)
             continue 
 
         ### compute similarities and then merge
@@ -502,7 +520,7 @@ def main(cfg : DictConfig):
             frame_idx,
             is_final_frame,
         ):
-            objects, map_edges = measure_time(merge_objects)(
+            merged = measure_time(merge_objects)(
                 merge_overlap_thresh=cfg["merge_overlap_thresh"],
                 merge_visual_sim_thresh=cfg["merge_visual_sim_thresh"],
                 merge_text_sim_thresh=cfg["merge_text_sim_thresh"],
@@ -564,11 +582,14 @@ def main(cfg : DictConfig):
                 create_symlink=True
             )
 
+        frame_time_s, fps = log_frame_timing(frame_idx, frame_start_time)
         owandb.log({
             "frame_idx": frame_idx,
             "counter": counter,
             "exit_early_flag": exit_early_flag,
             "is_final_frame": is_final_frame,
+            "frame_time_s": frame_time_s,
+            "fps": fps,
         })
 
         tracker.increment_total_objects(len(objects))
@@ -582,8 +603,23 @@ def main(cfg : DictConfig):
                 "counter": counter,
                 "exit_early_flag": exit_early_flag,
                 "is_final_frame": is_final_frame,
+                "frame_time_s": frame_time_s,
+                "fps": fps,
                 })
     # LOOP OVER -----------------------------------------------------
+
+    total_time_s = time.time() - loop_start_time
+    num_frames = len(frame_times)
+    avg_fps = num_frames / total_time_s if total_time_s > 0 else 0.0
+    print(
+        f"Processed {num_frames} frames in {total_time_s:.2f}s, "
+        f"avg_fps={avg_fps:.3f}"
+    )
+    owandb.log({
+        "avg_fps": avg_fps,
+        "total_time_s": total_time_s,
+        "num_frames": num_frames,
+    })
     
     # Consolidate captions (skipped when OpenAI is not used)
     for object in objects:
