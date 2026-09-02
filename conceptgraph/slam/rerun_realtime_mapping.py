@@ -516,6 +516,10 @@ def main(cfg : DictConfig):
                 do_edges=cfg["make_edges"],
                 map_edges=map_edges
             )
+            if cfg["make_edges"]:
+                objects, map_edges = merged
+            else:
+                objects = merged
         orr_log_objs_pcd_and_bbox(objects, obj_classes)
         orr_log_edges(objects, map_edges, obj_classes)
 
