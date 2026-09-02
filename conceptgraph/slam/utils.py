@@ -734,9 +734,9 @@ def merge_objects(
     do_edges: bool = False,
     map_edges = None,
 ):
-    if len(objects) == 0:
-        return objects
-    if merge_overlap_thresh <= 0:
+    if len(objects) == 0 or merge_overlap_thresh <= 0:
+        if do_edges:
+            return objects, map_edges
         return objects
 
     # Assuming compute_overlap_matrix requires only `objects` and `downsample_voxel_size`

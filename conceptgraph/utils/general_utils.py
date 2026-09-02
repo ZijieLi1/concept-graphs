@@ -329,6 +329,9 @@ def filter_detections(
         print("Detections object is missing required attributes.")
         return detections, []
 
+    if len(detections) == 0:
+        return detections, []
+
     # Sort by confidence initially
     detections_combined = sorted(
         zip(detections.confidence, detections.class_id, detections.xyxy, detections.mask, range(len(given_labels))),
@@ -383,6 +386,17 @@ def filter_detections(
 
         if keep:
             filtered_detections.append(current_det)
+
+    if len(filtered_detections) == 0:
+        empty_mask = None
+        if detections.mask is not None:
+            empty_mask = np.empty((0, *detections.mask.shape[1:]), dtype=np.bool_)
+        return sv.Detections(
+            xyxy=np.empty((0, 4), dtype=np.float32),
+            confidence=np.array([], dtype=np.float32),
+            class_id=np.array([], dtype=np.int64),
+            mask=empty_mask,
+        ), []
 
     # Unzip the filtered results
     confidences, class_ids, xyxy, masks, indices = zip(*filtered_detections)
