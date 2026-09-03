@@ -1,6 +1,11 @@
+import os
+
+from conceptgraph.utils.open3d_display import force_x11_for_open3d
+
+force_x11_for_open3d()
+
 import copy
 import gc
-import os
 import pickle
 import gzip
 import argparse

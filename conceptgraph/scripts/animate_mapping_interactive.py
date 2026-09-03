@@ -1,5 +1,10 @@
-import cv2
 import os
+
+from conceptgraph.utils.open3d_display import force_x11_for_open3d
+
+force_x11_for_open3d()
+
+import cv2
 import PyQt5
 
 # Set the QT_QPA_PLATFORM_PLUGIN_PATH environment variable

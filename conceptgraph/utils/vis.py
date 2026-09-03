@@ -1,3 +1,7 @@
+from conceptgraph.utils.open3d_display import force_x11_for_open3d
+
+force_x11_for_open3d()
+
 import copy
 import logging
 from pathlib import Path
