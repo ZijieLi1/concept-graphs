@@ -9,7 +9,7 @@ import torch
 from ultralytics import SAM, YOLO, YOLOE
 
 
-DETECTOR_CHOICES = ("yolo11_sam", "yoloe", "yoloe_pf")
+DETECTOR_CHOICES = ("yolo11_sam", "yolo26_seg", "yoloe", "yoloe_pf")
 
 
 def ultralytics_class_names(model) -> list[str]:
@@ -53,6 +53,9 @@ def init_detector(cfg, prompt_class_names: list[str]):
     if backend == "yolo11_sam":
         detection_model = YOLO(cfg.yolo11_weights)
         sam_predictor = SAM(cfg.sam_weights)
+        class_names = ultralytics_class_names(detection_model)
+    elif backend == "yolo26_seg":
+        detection_model = YOLO(cfg.yolo26_seg_weights)
         class_names = ultralytics_class_names(detection_model)
     elif backend == "yoloe":
         detection_model = YOLOE(cfg.yoloe_weights)
