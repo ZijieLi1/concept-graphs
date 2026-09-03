@@ -45,7 +45,8 @@ class OptionalReRun:
                     logging.warning(f"'{name}' is not a valid rerun method.")
             else:
                 if not self._config_use_rerun:
-                    logging.debug(f"Skipping optional rerun call to '{name}' because rerun usage is disabled.")
+                    pass
+                    #logging.debug(f"Skipping optional rerun call to '{name}' because rerun usage is disabled.")
                 elif self._rerun is None:
                     logging.debug(f"Skipping optional rerun call to '{name}' because rerun is not installed.")
         return method
