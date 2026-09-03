@@ -1,5 +1,11 @@
-import cv2
 import os
+
+# Must run before Open3D/GLFW is imported. Wayland + glfwSetWindowPos segfaults.
+from conceptgraph.utils.open3d_display import force_x11_for_open3d
+
+force_x11_for_open3d()
+
+import cv2
 # import PyQt5
 
 # # Set the QT_QPA_PLATFORM_PLUGIN_PATH environment variable
