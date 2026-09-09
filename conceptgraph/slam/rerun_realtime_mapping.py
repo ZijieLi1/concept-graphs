@@ -280,9 +280,11 @@ def main(cfg : DictConfig):
             #labels, edges, edge_image, captions = make_vlm_edges_and_captions(image, curr_det, obj_classes, detection_class_labels, det_exp_vis_path, color_path, cfg.make_edges, openai_client)
             labels, edges, edge_image, captions = make_vlm_edges_and_captions(image, curr_det, obj_classes, detection_class_labels, det_exp_vis_path, color_path, False, None)
 
-
-            image_crops, image_feats, text_feats = compute_clip_features_batched(
-                image_rgb, curr_det, clip_model, clip_preprocess, clip_tokenizer, obj_classes.get_classes_arr(), cfg.device)
+            if len(curr_det.xyxy) == 0:
+                image_crops, image_feats, text_feats = [], np.empty((0, 0), dtype=np.float32), []
+            else:
+                image_crops, image_feats, text_feats = compute_clip_features_batched(
+                    image_rgb, curr_det, clip_model, clip_preprocess, clip_tokenizer, obj_classes.get_classes_arr(), cfg.device)
 
             # increment total object detections
             tracker.increment_total_detections(len(curr_det.xyxy))
