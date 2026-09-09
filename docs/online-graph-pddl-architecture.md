@@ -31,7 +31,7 @@ Per-frame detect → CLIP → project to 3D → spatial+visual match → merge i
 
 ### What already exists (so we don’t rebuild it)
 
-`conceptgraph/slam/mapping.py` already associates detections to objects every frame. `merge_obj2_into_obj1` weighted-averages `clip_ft`. `gui_realtime_mapping.py` already runs mapping on a background thread. Scene-graph GPT / LLaVA lives in `build_scenegraph_cfslam.py` and is offline only. There is no ROS, no query server, and no PDDL anywhere in the tree.
+`conceptgraph/slam/mapping.py` already associates detections to objects every frame. `merge_obj2_into_obj1` weighted-averages `clip_ft`. `gui_realtime_mapping.py` already runs mapping on a background thread. Scene-graph GPT / LLaVA lives in `build_scenegraph_cfslam.py` and is offline only. Live USB can go through ROS2 (`record3d_ros_publisher` + `RosRgbDPoseSource`); there is still no query server and no PDDL.
 
 ## What to turn off
 
@@ -127,7 +127,9 @@ snapshot(min_obs=3) -> SceneGraph
 
 ### Frame ingest
 
-Replace dataset-index coupling with `FrameSource.next()`, which returns a `Frame` or `None`. Implementations: preprocessed folder (today), Record3D USB, and a callback/queue fed by the VSLAM node. Mapping loop stays the same. If the mapper is slower than the camera, drop oldest frames — never block VSLAM.
+Replace dataset-index coupling with `FrameSource.next()`, which returns a `Frame` or `None`. Mapping loop stays the same. If the mapper is slower than the camera, drop oldest frames — never block VSLAM.
+
+Live USB/ROS wiring, conda vs Jazzy, and what to swap on a robot: [`ros-ingest.md`](ros-ingest.md). Unix sockets are only an interpreter bridge (conda 3.10 cannot import Jazzy `rclpy`). The robot bus is ROS topics; YOLO/CLIP/fuse only see `Frame`.
 
 ### Snapshot JSON the LM actually sees
 
@@ -172,7 +174,7 @@ One `threading.Lock` around mutate (match/merge/filter) and snapshot copy. CLIP 
 Each phase should be shippable on Replica/Record3D without the robot. Later phases wrap the same in-process objects.
 
 - [ ] **Phase 0 — Headless in-memory mapper.** Force `save_pcd` / json / detections / rerun / wandb off. Stop stream JPEG writes. Strip `mask` / `xyxy` / `color_path` from nodes after CLIP. Confirm RAM stays flat over a long Replica run.
-- [ ] **Phase 1 — FrameSource interface.** Dataset, Record3D, and an in-memory queue with `(rgb, depth, K, pose, t)`. Mapping loop consumes the queue; drop-oldest if backed up. VSLAM stays a pose publisher into that queue.
+- [x] **Phase 1 — FrameSource interface.** `Frame` + depth-1 `LatestFrameSlot`. USB (`UsbRecord3DFrameSource`) and ROS (`RosRgbDPoseSource` on color/depth/K/pose). Mapping loop calls `next()`; producer never blocks. Offline dataset FrameSource is still the old indexed loader, not this interface.
 - [ ] **Phase 2 — Snapshot isolation + `GroundingService.find()`.** Lock, copy `clip_ft` stack, cosine search, filter `min_obs`. Unit-test `find()` during merge/filter so deleted indices never leak. This is the first user-visible query-while-mapping.
 - [ ] **Phase 3 — PlannerSnapshot.** After merge: filter `min_obs`, resolve type via a closed label map, compute geometric on/in/adjacent from AABBs, emit JSON. No CLIP vectors, no pcds. Golden tests on Replica room2 vs hand-labeled predicates.
 - [ ] **Phase 4 — LM adapter (separate module).** Prompt: domain predicates + snapshot JSON → PDDL problem. Do not bake planner-specific syntax into `slam/`. Version the snapshot schema. Evaluate with a frozen map first, then live.

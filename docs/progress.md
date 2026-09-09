@@ -1,6 +1,24 @@
 # Progress log
 
-Architecture and phases live in [`online-graph-pddl-architecture.md`](online-graph-pddl-architecture.md). This file is what landed, in date order.
+Architecture and phases live in [`online-graph-pddl-architecture.md`](online-graph-pddl-architecture.md). Live USB/ROS ingest (sockets vs ROS, robot swap): [`ros-ingest.md`](ros-ingest.md). This file is what landed, in date order.
+
+## 2026-09-09
+
+ROS2 ingest for the live mapper. Record3D USB is either owned by this process (`ingest=usb`) or by a publisher node (`ingest=ros`). The mapper never blocks the camera: a depth-1 slot overwrites, the mapping thread is the only consumer.
+
+Conda is Python 3.10; Jazzy `rclpy` is 3.12 — they do not share an interpreter. Unix sockets bridge that gap; ROS is the bus a robot replaces. Details: [`ros-ingest.md`](ros-ingest.md).
+
+### Shipped
+
+- **Publisher** `conceptgraph/scripts/record3d_ros_publisher.py` — conda USB pump → unix socket → Jazzy `/usr/bin/python3` publishes `/record3d/color/image_raw` (bgr8), `/record3d/depth/image_raw` (32FC1 meters, RGB-sized), `/record3d/color/camera_info`, `/record3d/pose` (`PoseStamped`, ARKit Y/Z flip already applied). Same stamp on all four. QoS BEST_EFFORT keep-last 1.
+- **Sidecar** `scripts/ros_topics_to_ipc.py` — Jazzy ExactTime sync → `LatestFrameSlot` → unix socket. `RosRgbDPoseSource` only pulls; conda never imports `rclpy`.
+- **Mapper** `r3d_stream_rerun_realtime_mapping.py` hydra `ingest=usb|ros`. USB connect still happens after CLIP load. One USB client: when `ingest=ros`, do not also run the mapper on USB.
+
+```bash
+conda activate conceptgraph
+python conceptgraph/scripts/record3d_ros_publisher.py
+# mapper: cd conceptgraph && python slam/r3d_stream_rerun_realtime_mapping.py ingest=ros
+```
 
 ## 2026-09-03
 
