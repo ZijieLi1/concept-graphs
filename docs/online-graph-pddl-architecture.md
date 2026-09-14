@@ -31,7 +31,7 @@ Per-frame detect → CLIP → project to 3D → spatial+visual match → merge i
 
 ### What already exists (so we don’t rebuild it)
 
-`conceptgraph/slam/mapping.py` already associates detections to objects every frame. `merge_obj2_into_obj1` weighted-averages `clip_ft`. `gui_realtime_mapping.py` already runs mapping on a background thread. Scene-graph GPT / LLaVA lives in `build_scenegraph_cfslam.py` and is offline only. Live USB can go through ROS2 (`record3d_ros_publisher` + `RosRgbDPoseSource`); there is still no query server and no PDDL.
+`conceptgraph/slam/mapping.py` already associates detections to objects every frame. `merge_obj2_into_obj1` weighted-averages `clip_ft`. `gui_realtime_mapping.py` already runs mapping on a background thread. Scene-graph GPT / LLaVA lives in `build_scenegraph_cfslam.py` and is offline only. Live USB can go through ROS2 (`record3d_ros_publisher` + `RosRgbDPoseSource`). Live CLIP `find()` is a ROS service (`/conceptgraph/find`); there is still no planner `snapshot()` / PDDL.
 
 ## What to turn off
 
@@ -175,7 +175,7 @@ Each phase should be shippable on Replica/Record3D without the robot. Later phas
 
 - [ ] **Phase 0 — Headless in-memory mapper.** Force `save_pcd` / json / detections / rerun / wandb off. Stop stream JPEG writes. Strip `mask` / `xyxy` / `color_path` from nodes after CLIP. Confirm RAM stays flat over a long Replica run.
 - [x] **Phase 1 — FrameSource interface.** `Frame` + depth-1 `LatestFrameSlot`. USB (`UsbRecord3DFrameSource`) and ROS (`RosRgbDPoseSource` on color/depth/K/pose). Mapping loop calls `next()`; producer never blocks. Offline dataset FrameSource is still the old indexed loader, not this interface.
-- [ ] **Phase 2 — Snapshot isolation + `GroundingService.find()`.** Lock, copy `clip_ft` stack, cosine search, filter `min_obs`. Unit-test `find()` during merge/filter so deleted indices never leak. This is the first user-visible query-while-mapping.
+- [x] **Phase 2 — `GroundingService.find()`.** Lock, copy `clip_ft` + metadata, cosine search, filter `min_obs`. Unix socket + ROS **service** `/conceptgraph/find` (not an action). `snapshot()` / PDDL still later. See [`ros-ingest.md`](ros-ingest.md).
 - [ ] **Phase 3 — PlannerSnapshot.** After merge: filter `min_obs`, resolve type via a closed label map, compute geometric on/in/adjacent from AABBs, emit JSON. No CLIP vectors, no pcds. Golden tests on Replica room2 vs hand-labeled predicates.
 - [ ] **Phase 4 — LM adapter (separate module).** Prompt: domain predicates + snapshot JSON → PDDL problem. Do not bake planner-specific syntax into `slam/`. Version the snapshot schema. Evaluate with a frozen map first, then live.
 - [ ] **Phase 5 — Optional.** Move detect+CLIP to a worker process if frame time is still over budget. Only after Phases 0–2 are measured. ROS2/ZMQ wrap of `find` / `snapshot` if other nodes need it.

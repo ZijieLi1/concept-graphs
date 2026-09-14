@@ -1,0 +1,12 @@
+dataset_name: record3d
+# Placeholder only. Live USB mapping overwrites H/W and uses per-frame K
+# from Record3DStream.get_intrinsic_mat() (typically 720x960 on this phone).
+camera_params:
+  image_height: 960
+  image_width: 720
+  fx: 673.0
+  fy: 673.0
+  cx: 364.0
+  cy: 478.0
+  png_depth_scale: 1000.0
+  crop_edge: 0

@@ -2,6 +2,14 @@
 
 Architecture and phases live in [`online-graph-pddl-architecture.md`](online-graph-pddl-architecture.md). Live USB/ROS ingest (sockets vs ROS, robot swap): [`ros-ingest.md`](ros-ingest.md). This file is what landed, in date order.
 
+## 2026-09-14
+
+Live CLIP `find()` while mapping. A **ROS service**, not an action — lookup is encode-text + cosine, not a long goal.
+
+- `GroundingService` copies `clip_ft` + id/class/aabb under `map_lock`, then scores the copy.
+- Mapper serves `/tmp/conceptgraph_find.sock`. CLI: `python conceptgraph/scripts/find_query.py mug`.
+- Optional Jazzy sidecar `/conceptgraph/find` after `colcon build` of `ros/conceptgraph_interfaces`. See [`ros-ingest.md`](ros-ingest.md).
+
 ## 2026-09-09
 
 ROS2 ingest for the live mapper. Record3D USB is either owned by this process (`ingest=usb`) or by a publisher node (`ingest=ros`). The mapper never blocks the camera: a depth-1 slot overwrites, the mapping thread is the only consumer.

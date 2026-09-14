@@ -101,3 +101,36 @@ If the mapper is slower than the camera, drop stale frames — never block the p
 - ROS: BEST_EFFORT keep-last 1.
 - Sidecar: `LatestFrameSlot` overwrite; mapper `next()` is a pull (`get`), not a callback.
 - USB (no ROS): Record3D SDK already overwrites its buffers.
+
+## Realtime `find()` (service, not action)
+
+CLIP lookup is a short request/response (encode text + cosine vs N objects). Use a **ROS service**, not an action.
+
+`GroundingService.find()` lives in the conda mapper. It copies `clip_ft` + metadata under `map_lock`, then scores the copy so a merge cannot leak deleted ids. The mapping thread holds that lock only while it mutates the map.
+
+```text
+ros2 service call /conceptgraph/find     Jazzy find_ros_service.py
+        unix socket                      /tmp/conceptgraph_find.sock
+GroundingService.find()                  conda mapper
+```
+
+One-time interface build (system Python / Jazzy, not conda):
+
+```bash
+source /opt/ros/jazzy/setup.bash
+cd /home/blinky/ZJ-WS/concept-graphs/ros
+colcon build --packages-select conceptgraph_interfaces
+```
+
+While the mapper is running (`find_enabled: true`):
+
+```bash
+# conda — no Jazzy source
+python conceptgraph/scripts/find_query.py mug
+
+# Jazzy shell (source jazzy + ros/install/setup.bash)
+ros2 service call /conceptgraph/find conceptgraph_interfaces/srv/Find \
+  "{text: 'mug', k: 5, min_sim: 0.25, min_obs: 3}"
+```
+
+`k`, `min_sim`, or `min_obs` ≤ 0 means “use the mapper default”. Snapshot / PDDL is a later API.

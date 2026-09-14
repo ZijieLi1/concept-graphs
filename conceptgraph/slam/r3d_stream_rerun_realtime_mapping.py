@@ -86,6 +86,9 @@ from conceptgraph.utils.model_utils import compute_clip_features_batched
 from conceptgraph.utils.general_utils import get_vis_out_path, cfg_to_dict, check_run_detections
 from conceptgraph.utils.detector_backends import init_detector, run_detector
 from conceptgraph.slam.frame_source import UsbRecord3DFrameSource
+from conceptgraph.slam.frame_ipc import spawn_jazzy_python
+from conceptgraph.slam.grounding import GroundingService
+from conceptgraph.slam.find_query_server import FindQueryServer
 
 torch.set_grad_enabled(False)
 
@@ -159,6 +162,9 @@ def main(cfg: DictConfig):
     prev_adjusted_pose = None
     detection_model = None
     sam_predictor = None
+    clip_model = None
+    clip_tokenizer = None
+    clip_preprocess = None
     detector_backend = str(cfg.detector)
 
     if run_detections:
@@ -177,6 +183,47 @@ def main(cfg: DictConfig):
         torch.cuda.empty_cache()
     else:
         print("\n".join(["NOT Running detections..."] * 10))
+
+    grounding = GroundingService(
+        clip_model=clip_model,
+        clip_tokenizer=clip_tokenizer,
+        device=cfg.device,
+        default_k=int(getattr(cfg, "find_k", 5)),
+        default_min_sim=float(getattr(cfg, "find_min_sim", 0.25)),
+        default_min_obs=int(getattr(cfg, "find_min_obs", 3)),
+    )
+    find_server = None
+    find_ros_proc = None
+    if clip_model is not None and bool(getattr(cfg, "find_enabled", True)):
+        find_sock = str(getattr(cfg, "find_socket", "/tmp/conceptgraph_find.sock"))
+        find_server = FindQueryServer(grounding, find_sock)
+        find_server.start()
+        repo_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        overlay = os.path.join(repo_dir, "ros", "install", "setup.bash")
+        find_script = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "scripts",
+            "find_ros_service.py",
+        )
+        if os.path.isfile(overlay):
+            find_ros_proc = spawn_jazzy_python(
+                find_script,
+                [
+                    "--socket",
+                    find_sock,
+                    "--service",
+                    str(getattr(cfg, "find_service", "/conceptgraph/find")),
+                ],
+                extra_setups=[overlay],
+            )
+            print(f"Find ROS service {getattr(cfg, 'find_service', '/conceptgraph/find')}")
+        else:
+            print(
+                "Find ROS service skipped — build interfaces once:\n"
+                "  source /opt/ros/jazzy/setup.bash && cd ros && "
+                "colcon build --packages-select conceptgraph_interfaces\n"
+                f"CLI still works: python conceptgraph/scripts/find_query.py mug --socket {find_sock}"
+            )
 
     save_hydra_config(cfg, exp_out_path)
     save_hydra_config(detections_exp_cfg, exp_out_path, is_detection_config=True)
@@ -211,42 +258,44 @@ def main(cfg: DictConfig):
     def run_final_cleanup():
         nonlocal objects, map_edges
         print("Performing final denoise / filter / merge...")
-        if cfg["run_denoise_final_frame"]:
-            objects = measure_time(denoise_objects)(
-                downsample_voxel_size=cfg["downsample_voxel_size"],
-                dbscan_remove_noise=cfg["dbscan_remove_noise"],
-                dbscan_eps=cfg["dbscan_eps"],
-                dbscan_min_points=cfg["dbscan_min_points"],
-                spatial_sim_type=cfg["spatial_sim_type"],
-                device=cfg["device"],
-                objects=objects,
-            )
-        if cfg["run_filter_final_frame"]:
-            objects = filter_objects(
-                obj_min_points=cfg["obj_min_points"],
-                obj_min_detections=cfg["obj_min_detections"],
-                objects=objects,
-                map_edges=map_edges,
-            )
-        if cfg["run_merge_final_frame"]:
-            merged = measure_time(merge_objects)(
-                merge_overlap_thresh=cfg["merge_overlap_thresh"],
-                merge_visual_sim_thresh=cfg["merge_visual_sim_thresh"],
-                merge_text_sim_thresh=cfg["merge_text_sim_thresh"],
-                objects=objects,
-                downsample_voxel_size=cfg["downsample_voxel_size"],
-                dbscan_remove_noise=cfg["dbscan_remove_noise"],
-                dbscan_eps=cfg["dbscan_eps"],
-                dbscan_min_points=cfg["dbscan_min_points"],
-                spatial_sim_type=cfg["spatial_sim_type"],
-                device=cfg["device"],
-                do_edges=cfg["make_edges"],
-                map_edges=map_edges,
-            )
-            if cfg["make_edges"]:
-                objects, map_edges = merged
-            else:
-                objects = merged
+        with grounding.map_lock:
+            if cfg["run_denoise_final_frame"]:
+                objects = measure_time(denoise_objects)(
+                    downsample_voxel_size=cfg["downsample_voxel_size"],
+                    dbscan_remove_noise=cfg["dbscan_remove_noise"],
+                    dbscan_eps=cfg["dbscan_eps"],
+                    dbscan_min_points=cfg["dbscan_min_points"],
+                    spatial_sim_type=cfg["spatial_sim_type"],
+                    device=cfg["device"],
+                    objects=objects,
+                )
+            if cfg["run_filter_final_frame"]:
+                objects = filter_objects(
+                    obj_min_points=cfg["obj_min_points"],
+                    obj_min_detections=cfg["obj_min_detections"],
+                    objects=objects,
+                    map_edges=map_edges,
+                )
+            if cfg["run_merge_final_frame"]:
+                merged = measure_time(merge_objects)(
+                    merge_overlap_thresh=cfg["merge_overlap_thresh"],
+                    merge_visual_sim_thresh=cfg["merge_visual_sim_thresh"],
+                    merge_text_sim_thresh=cfg["merge_text_sim_thresh"],
+                    objects=objects,
+                    downsample_voxel_size=cfg["downsample_voxel_size"],
+                    dbscan_remove_noise=cfg["dbscan_remove_noise"],
+                    dbscan_eps=cfg["dbscan_eps"],
+                    dbscan_min_points=cfg["dbscan_min_points"],
+                    spatial_sim_type=cfg["spatial_sim_type"],
+                    device=cfg["device"],
+                    do_edges=cfg["make_edges"],
+                    map_edges=map_edges,
+                )
+                if cfg["make_edges"]:
+                    objects, map_edges = merged
+                else:
+                    objects = merged
+            grounding.set_objects(objects)
 
     def persist_scene():
         nonlocal objects
@@ -410,15 +459,16 @@ def main(cfg: DictConfig):
                 if len(curr_det.xyxy) == 0:
                     image_crops, image_feats, text_feats = empty_clip_outputs()
                 else:
-                    image_crops, image_feats, text_feats = compute_clip_features_batched(
-                        image_rgb,
-                        curr_det,
-                        clip_model,
-                        clip_preprocess,
-                        clip_tokenizer,
-                        obj_classes.get_classes_arr(),
-                        cfg.device,
-                    )
+                    with grounding.clip_lock:
+                        image_crops, image_feats, text_feats = compute_clip_features_batched(
+                            image_rgb,
+                            curr_det,
+                            clip_model,
+                            clip_preprocess,
+                            clip_tokenizer,
+                            obj_classes.get_classes_arr(),
+                            cfg.device,
+                        )
 
                 tracker.increment_total_detections(len(curr_det.xyxy))
                 results = {
@@ -533,119 +583,122 @@ def main(cfg: DictConfig):
                 log_frame_timing(frame_idx, frame_start_time)
                 continue
 
-            if len(objects) == 0:
-                objects.extend(detection_list)
-                tracker.increment_total_objects(len(detection_list))
-                owandb.log({
-                    "total_objects_so_far": tracker.get_total_objects(),
-                    "objects_this_frame": len(detection_list),
-                })
-                log_frame_timing(frame_idx, frame_start_time)
-                continue
+            with grounding.map_lock:
+                if len(objects) == 0:
+                    objects.extend(detection_list)
+                    grounding.set_objects(objects)
+                    tracker.increment_total_objects(len(detection_list))
+                    owandb.log({
+                        "total_objects_so_far": tracker.get_total_objects(),
+                        "objects_this_frame": len(detection_list),
+                    })
+                    log_frame_timing(frame_idx, frame_start_time)
+                    continue
 
-            spatial_sim = compute_spatial_similarities(
-                spatial_sim_type=cfg["spatial_sim_type"],
-                detection_list=detection_list,
-                objects=objects,
-                downsample_voxel_size=cfg["downsample_voxel_size"],
-            )
-            visual_sim = compute_visual_similarities(detection_list, objects)
-            agg_sim = aggregate_similarities(
-                match_method=cfg["match_method"],
-                phys_bias=cfg["phys_bias"],
-                spatial_sim=spatial_sim,
-                visual_sim=visual_sim,
-            )
-            match_indices = match_detections_to_objects(
-                agg_sim=agg_sim,
-                detection_threshold=cfg["sim_threshold"],
-            )
-            objects = merge_obj_matches(
-                detection_list=detection_list,
-                objects=objects,
-                match_indices=match_indices,
-                downsample_voxel_size=cfg["downsample_voxel_size"],
-                dbscan_remove_noise=cfg["dbscan_remove_noise"],
-                dbscan_eps=cfg["dbscan_eps"],
-                dbscan_min_points=cfg["dbscan_min_points"],
-                spatial_sim_type=cfg["spatial_sim_type"],
-                device=cfg["device"],
-            )
-
-            for obj in objects:
-                curr_obj_class_id_counter = Counter(obj["class_id"])
-                most_common_class_id = curr_obj_class_id_counter.most_common(1)[0][0]
-                most_common_class_name = obj_classes.get_classes_arr()[most_common_class_id]
-                if obj["class_name"] != most_common_class_name:
-                    obj["class_name"] = most_common_class_name
-
-            if cfg.make_edges and gobs.get("edges"):
-                map_edges = process_edges(
-                    match_indices, gobs, len(objects), objects, map_edges, frame_idx
+                spatial_sim = compute_spatial_similarities(
+                    spatial_sim_type=cfg["spatial_sim_type"],
+                    detection_list=detection_list,
+                    objects=objects,
+                    downsample_voxel_size=cfg["downsample_voxel_size"],
                 )
-                edges_to_delete = []
-                for curr_map_edge in map_edges.edges_by_index.values():
-                    if (frame_idx - curr_map_edge.first_detected > 5) and curr_map_edge.num_detections < 2:
-                        edges_to_delete.append((curr_map_edge.obj1_idx, curr_map_edge.obj2_idx))
-                for edge in edges_to_delete:
-                    map_edges.delete_edge(edge[0], edge[1])
-
-            if is_final_frame:
-                print("Final frame detected. Performing final post-processing...")
-
-            if processing_needed(
-                cfg["denoise_interval"],
-                cfg["run_denoise_final_frame"],
-                frame_idx,
-                is_final_frame,
-            ):
-                objects = measure_time(denoise_objects)(
+                visual_sim = compute_visual_similarities(detection_list, objects)
+                agg_sim = aggregate_similarities(
+                    match_method=cfg["match_method"],
+                    phys_bias=cfg["phys_bias"],
+                    spatial_sim=spatial_sim,
+                    visual_sim=visual_sim,
+                )
+                match_indices = match_detections_to_objects(
+                    agg_sim=agg_sim,
+                    detection_threshold=cfg["sim_threshold"],
+                )
+                objects = merge_obj_matches(
+                    detection_list=detection_list,
+                    objects=objects,
+                    match_indices=match_indices,
                     downsample_voxel_size=cfg["downsample_voxel_size"],
                     dbscan_remove_noise=cfg["dbscan_remove_noise"],
                     dbscan_eps=cfg["dbscan_eps"],
                     dbscan_min_points=cfg["dbscan_min_points"],
                     spatial_sim_type=cfg["spatial_sim_type"],
                     device=cfg["device"],
-                    objects=objects,
                 )
 
-            if processing_needed(
-                cfg["filter_interval"],
-                cfg["run_filter_final_frame"],
-                frame_idx,
-                is_final_frame,
-            ):
-                objects = filter_objects(
-                    obj_min_points=cfg["obj_min_points"],
-                    obj_min_detections=cfg["obj_min_detections"],
-                    objects=objects,
-                    map_edges=map_edges,
-                )
+                for obj in objects:
+                    curr_obj_class_id_counter = Counter(obj["class_id"])
+                    most_common_class_id = curr_obj_class_id_counter.most_common(1)[0][0]
+                    most_common_class_name = obj_classes.get_classes_arr()[most_common_class_id]
+                    if obj["class_name"] != most_common_class_name:
+                        obj["class_name"] = most_common_class_name
 
-            if processing_needed(
-                cfg["merge_interval"],
-                cfg["run_merge_final_frame"],
-                frame_idx,
-                is_final_frame,
-            ):
-                merged = measure_time(merge_objects)(
-                    merge_overlap_thresh=cfg["merge_overlap_thresh"],
-                    merge_visual_sim_thresh=cfg["merge_visual_sim_thresh"],
-                    merge_text_sim_thresh=cfg["merge_text_sim_thresh"],
-                    objects=objects,
-                    downsample_voxel_size=cfg["downsample_voxel_size"],
-                    dbscan_remove_noise=cfg["dbscan_remove_noise"],
-                    dbscan_eps=cfg["dbscan_eps"],
-                    dbscan_min_points=cfg["dbscan_min_points"],
-                    spatial_sim_type=cfg["spatial_sim_type"],
-                    device=cfg["device"],
-                    do_edges=cfg["make_edges"],
-                    map_edges=map_edges,
-                )
-                if cfg["make_edges"]:
-                    objects, map_edges = merged
-                else:
-                    objects = merged
+                if cfg.make_edges and gobs.get("edges"):
+                    map_edges = process_edges(
+                        match_indices, gobs, len(objects), objects, map_edges, frame_idx
+                    )
+                    edges_to_delete = []
+                    for curr_map_edge in map_edges.edges_by_index.values():
+                        if (frame_idx - curr_map_edge.first_detected > 5) and curr_map_edge.num_detections < 2:
+                            edges_to_delete.append((curr_map_edge.obj1_idx, curr_map_edge.obj2_idx))
+                    for edge in edges_to_delete:
+                        map_edges.delete_edge(edge[0], edge[1])
+
+                if is_final_frame:
+                    print("Final frame detected. Performing final post-processing...")
+
+                if processing_needed(
+                    cfg["denoise_interval"],
+                    cfg["run_denoise_final_frame"],
+                    frame_idx,
+                    is_final_frame,
+                ):
+                    objects = measure_time(denoise_objects)(
+                        downsample_voxel_size=cfg["downsample_voxel_size"],
+                        dbscan_remove_noise=cfg["dbscan_remove_noise"],
+                        dbscan_eps=cfg["dbscan_eps"],
+                        dbscan_min_points=cfg["dbscan_min_points"],
+                        spatial_sim_type=cfg["spatial_sim_type"],
+                        device=cfg["device"],
+                        objects=objects,
+                    )
+
+                if processing_needed(
+                    cfg["filter_interval"],
+                    cfg["run_filter_final_frame"],
+                    frame_idx,
+                    is_final_frame,
+                ):
+                    objects = filter_objects(
+                        obj_min_points=cfg["obj_min_points"],
+                        obj_min_detections=cfg["obj_min_detections"],
+                        objects=objects,
+                        map_edges=map_edges,
+                    )
+
+                if processing_needed(
+                    cfg["merge_interval"],
+                    cfg["run_merge_final_frame"],
+                    frame_idx,
+                    is_final_frame,
+                ):
+                    merged = measure_time(merge_objects)(
+                        merge_overlap_thresh=cfg["merge_overlap_thresh"],
+                        merge_visual_sim_thresh=cfg["merge_visual_sim_thresh"],
+                        merge_text_sim_thresh=cfg["merge_text_sim_thresh"],
+                        objects=objects,
+                        downsample_voxel_size=cfg["downsample_voxel_size"],
+                        dbscan_remove_noise=cfg["dbscan_remove_noise"],
+                        dbscan_eps=cfg["dbscan_eps"],
+                        dbscan_min_points=cfg["dbscan_min_points"],
+                        spatial_sim_type=cfg["spatial_sim_type"],
+                        device=cfg["device"],
+                        do_edges=cfg["make_edges"],
+                        map_edges=map_edges,
+                    )
+                    if cfg["make_edges"]:
+                        objects, map_edges = merged
+                    else:
+                        objects = merged
+                grounding.set_objects(objects)
 
             orr_log_objs_pcd_and_bbox(objects, obj_classes)
             if cfg.make_edges:
@@ -706,6 +759,14 @@ def main(cfg: DictConfig):
                 "fps": fps,
             })
     finally:
+        if find_ros_proc is not None and find_ros_proc.poll() is None:
+            find_ros_proc.terminate()
+            try:
+                find_ros_proc.wait(timeout=3)
+            except Exception:
+                find_ros_proc.kill()
+        if find_server is not None:
+            find_server.close()
         frame_source.close()
 
     signal.signal(signal.SIGINT, prev_sigint)

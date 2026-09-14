@@ -132,10 +132,12 @@ def connect_unix(path: str, timeout: float = 15.0) -> socket.socket:
     raise ConnectionError(f"could not connect to {path}: {last_err}")
 
 
-def load_jazzy_env(setup_bash: str = JAZZY_SETUP) -> dict:
+def load_jazzy_env(setup_bash: str = JAZZY_SETUP, extra_setups=()) -> dict:
     """Env for /usr/bin/python3 + Jazzy. No conda PYTHONHOME/PATH."""
-    if not os.path.isfile(setup_bash):
-        raise FileNotFoundError(f"ROS setup not found: {setup_bash}")
+    setups = [setup_bash, *[s for s in extra_setups if s]]
+    for path in setups:
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"ROS setup not found: {path}")
     passthrough = {
         "HOME": os.environ.get("HOME", ""),
         "USER": os.environ.get("USER", ""),
@@ -156,8 +158,9 @@ def load_jazzy_env(setup_bash: str = JAZZY_SETUP) -> dict:
         "HOME": passthrough["HOME"],
         "LANG": passthrough["LANG"],
     }
+    source_cmd = " && ".join(f"source {path}" for path in setups) + " && env -0"
     raw = subprocess.check_output(
-        ["/bin/bash", "--noprofile", "--norc", "-c", f"source {setup_bash} && env -0"],
+        ["/bin/bash", "--noprofile", "--norc", "-c", source_cmd],
         env=bootstrap,
     )
     env = {}
@@ -170,7 +173,9 @@ def load_jazzy_env(setup_bash: str = JAZZY_SETUP) -> dict:
     return env
 
 
-def spawn_jazzy_python(script: str, args: list[str]) -> subprocess.Popen:
-    env = load_jazzy_env()
+def spawn_jazzy_python(
+    script: str, args: list[str], extra_setups=()
+) -> subprocess.Popen:
+    env = load_jazzy_env(extra_setups=extra_setups)
     cmd = [JAZZY_PYTHON, script, *args]
     return subprocess.Popen(cmd, env=env)
