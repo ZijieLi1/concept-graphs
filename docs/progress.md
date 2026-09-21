@@ -1,6 +1,15 @@
 # Progress log
 
-Architecture and phases live in [`online-graph-pddl-architecture.md`](online-graph-pddl-architecture.md). Live USB/ROS ingest (sockets vs ROS, robot swap): [`ros-ingest.md`](ros-ingest.md). This file is what landed, in date order.
+Architecture and phases live in [`online-graph-pddl-architecture.md`](online-graph-pddl-architecture.md). Live USB/ROS ingest (ROS bus, robot swap): [`ros-ingest.md`](ros-ingest.md). This file is what landed, in date order.
+
+## 2026-09-21
+
+Unix sockets and Jazzy sidecars removed. Humble Docker is the interpreter: `rclpy` is in-process with torch.
+
+- **Publisher** is a single process (USB + Humble `rclpy`).
+- **`RosRgbDPoseSource`** subscribes in the mapper; `LatestFrameSlot` still drop-oldest.
+- **`FindRosService`** is `/conceptgraph/find` in the mapper. CLI: `python3 conceptgraph/scripts/find_query.py mug`.
+- Deleted `ros_topics_to_ipc.py`, `find_ros_service.py`, `find_query_server.py`. `frame_ipc.py` is only the slot + quaternion helpers.
 
 ## 2026-09-14
 

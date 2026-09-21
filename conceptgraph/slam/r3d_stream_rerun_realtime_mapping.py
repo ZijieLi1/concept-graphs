@@ -86,9 +86,8 @@ from conceptgraph.utils.model_utils import compute_clip_features_batched
 from conceptgraph.utils.general_utils import get_vis_out_path, cfg_to_dict, check_run_detections
 from conceptgraph.utils.detector_backends import init_detector, run_detector
 from conceptgraph.slam.frame_source import UsbRecord3DFrameSource
-from conceptgraph.slam.frame_ipc import spawn_jazzy_python
 from conceptgraph.slam.grounding import GroundingService
-from conceptgraph.slam.find_query_server import FindQueryServer
+from conceptgraph.slam.find_ros import FindRosService
 
 torch.set_grad_enabled(False)
 
@@ -111,7 +110,9 @@ def prompt_yes_no(message: str, default: bool = False) -> bool:
 
 @hydra.main(version_base=None, config_path="../hydra_configs/", config_name="r3d_stream_rerun_realtime_mapping")
 def main(cfg: DictConfig):
-    ingest = str(getattr(cfg, "ingest", "usb"))
+    ingest = str(getattr(cfg, "ingest", "usb")).lower()
+    if ingest in ("ros", "ros2"):
+        ingest = "ros"
     app = None
     if ingest != "ros":
         from conceptgraph.utils.record3d_utils import DemoApp
@@ -193,37 +194,13 @@ def main(cfg: DictConfig):
         default_min_obs=int(getattr(cfg, "find_min_obs", 3)),
     )
     find_server = None
-    find_ros_proc = None
     if clip_model is not None and bool(getattr(cfg, "find_enabled", True)):
-        find_sock = str(getattr(cfg, "find_socket", "/tmp/conceptgraph_find.sock"))
-        find_server = FindQueryServer(grounding, find_sock)
-        find_server.start()
-        repo_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        overlay = os.path.join(repo_dir, "ros", "install", "setup.bash")
-        find_script = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "scripts",
-            "find_ros_service.py",
+        find_server = FindRosService(
+            grounding,
+            service_name=str(getattr(cfg, "find_service", "/conceptgraph/find")),
         )
-        if os.path.isfile(overlay):
-            find_ros_proc = spawn_jazzy_python(
-                find_script,
-                [
-                    "--socket",
-                    find_sock,
-                    "--service",
-                    str(getattr(cfg, "find_service", "/conceptgraph/find")),
-                ],
-                extra_setups=[overlay],
-            )
-            print(f"Find ROS service {getattr(cfg, 'find_service', '/conceptgraph/find')}")
-        else:
-            print(
-                "Find ROS service skipped — build interfaces once:\n"
-                "  source /opt/ros/jazzy/setup.bash && cd ros && "
-                "colcon build --packages-select conceptgraph_interfaces\n"
-                f"CLI still works: python conceptgraph/scripts/find_query.py mug --socket {find_sock}"
-            )
+        if not find_server.start():
+            find_server = None
 
     save_hydra_config(cfg, exp_out_path)
     save_hydra_config(detections_exp_cfg, exp_out_path, is_detection_config=True)
@@ -759,12 +736,6 @@ def main(cfg: DictConfig):
                 "fps": fps,
             })
     finally:
-        if find_ros_proc is not None and find_ros_proc.poll() is None:
-            find_ros_proc.terminate()
-            try:
-                find_ros_proc.wait(timeout=3)
-            except Exception:
-                find_ros_proc.kill()
         if find_server is not None:
             find_server.close()
         frame_source.close()

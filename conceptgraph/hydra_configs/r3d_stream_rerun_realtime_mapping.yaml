@@ -1,0 +1,50 @@
+defaults:
+  - base
+  - base_mapping
+  - stream_record3d
+  - sam
+  - classes
+  - detector
+  - logging_level
+  - _self_
+
+# Live USB: K and resolution come from Record3DStream, not this file.
+# ingest=usb: mapper owns the phone. ingest=ros|ros2: USB is held by record3d_ros_publisher.
+# Robot: keep ingest=ros, remap these four topics. See docs/ros-ingest.md.
+ingest: ros
+ros_rgb_topic: /record3d/color/image_raw
+ros_depth_topic: /record3d/depth/image_raw
+ros_camera_info_topic: /record3d/color/camera_info
+ros_pose_topic: /record3d/pose
+
+find_enabled: !!bool True
+find_service: /conceptgraph/find
+find_k: 5
+find_min_sim: 0.25
+find_min_obs: 3
+
+force_detection: !!bool True
+save_detections: !!bool False
+detector: yolo26_seg
+
+make_edges: !!bool False
+stride: 1
+exp_suffix: live_usb
+detections_exp_suffix: live_usb_dets
+
+save_video: !!bool False
+save_objects_all_frames: !!bool False
+vis_render: !!bool False
+debug_render: !!bool False
+
+use_rerun: !!bool True
+save_rerun: !!bool False
+
+denoise_interval: 10
+filter_interval: 10
+merge_interval: 5
+run_denoise_final_frame: !!bool True
+run_filter_final_frame: !!bool True
+run_merge_final_frame: !!bool True
+
+obj_min_detections: 1

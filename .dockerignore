@@ -1,0 +1,25 @@
+# Git / colcon / datasets / weights — keep the image small
+.git
+.gitignore
+**/.gitignore
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+
+Record3D/
+Replica/
+Replica.zip
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.safetensors
+
+outputs/
+wandb/
+docs/
+ros/build/
+ros/install/
+ros/log/
+
+docker/README.md

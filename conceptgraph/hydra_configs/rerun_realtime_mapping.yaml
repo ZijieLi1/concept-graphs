@@ -1,8 +1,8 @@
 defaults:
   - base
   - base_mapping
-  - replica
-  # - record3d
+  # - replica
+  - record3d
   - sam
   - classes
   - detector
@@ -10,17 +10,17 @@ defaults:
   - _self_
 
 
-detections_exp_suffix: s_detections_stride10 # helpful label to identify your detections
+detections_exp_suffix: yoloe_pf_detections_apt # helpful label to identify your detections
 force_detection: !!bool True
-save_detections: !!bool True
+save_detections: !!bool False
 
-# Detection backend: yolo11_sam | yoloe | yoloe_pf
-detector: yoloe_pf
+# Detection backend: yolo11_sam | yolo26_seg | yoloe | yoloe_pf
+detector: yoloe
 
-make_edges: !!bool True
+make_edges: !!bool False
 
 stride: 10
-exp_suffix: r_mapping_stride10 # helpful label to identify your mapping experiment
+exp_suffix: yoloe_pf_exp_apt # helpful label to identify your mapping experiment
 
 save_video: !!bool False
 save_objects_all_frames: !!bool False
@@ -31,8 +31,8 @@ obj_pcd_max_points: 5000
 debug_render: !!bool False
 vis_render: !!bool False
 
-denoise_interval: 5           # Run DBSCAN every k frame. This operation is heavy
-filter_interval: 5            # Filter objects that have too few associations or are too small
+denoise_interval: -1 # 5           # Run DBSCAN every k frame. This operation is heavy
+filter_interval: -1 # 5            # Filter objects that have too few associations or are too small
 merge_interval: 5             # Merge objects based on geometric and semantic similarity
 run_denoise_final_frame: !!bool True
 run_filter_final_frame: !!bool True
@@ -47,8 +47,8 @@ obj_min_points: 0
 obj_min_detections: 1
 
 # For merge_overlap_objects() function
-use_rerun: !!bool True
-save_rerun: !!bool True
+use_rerun: !!bool False
+save_rerun: !!bool False
 
 # hydra:
 #   verbose: true

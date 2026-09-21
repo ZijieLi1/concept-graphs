@@ -1,3 +1,24 @@
+# Model weights (downloaded separately)
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.safetensors
+mobileclip_blt.ts
+
+# Local image captures
+*.png
+*.jpg
+*.jpeg
+DepthCamera_*.json
+latest_pcd_save
+
+# Replica dataset (large, downloaded separately)
+Replica/
+Replica.zip
+
+# Record3D recordings
+Record3D/
 conceptgraph/outputs
 conceptgraph/scripts/wandb
 conceptgraph/results
@@ -130,6 +151,13 @@ celerybeat.pid
 
 # SageMath parsed files
 *.sage.py
+
+# colcon overlay for conceptgraph_interfaces
+ros/install/
+ros/log/
+
+# Docker build context leftovers
+docker/.cache/
 
 # Environments
 .env

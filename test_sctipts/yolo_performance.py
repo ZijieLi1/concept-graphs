@@ -11,9 +11,9 @@ from ultralytics import YOLO, YOLOE
 
 # --- edit these ---
 IMAGE_DIR = Path(
-    "/home/blinky/ZJ-WS/concept-graphs/Record3D/apartment_living_room_preprocessed/rgb"
+    "/ws/Record3D/apartment_living_room_preprocessed/rgb"
 )
-MODEL_PATH = Path("/home/blinky/ZJ-WS/concept-graphs/conceptgraph/yoloe-11m-seg-pf.pt")
+MODEL_PATH = Path("/ws/conceptgraph/yoloe-11m-seg-pf.pt")
 # Optional text prompts for YOLOE (leave empty for prompt-free / YOLO11).
 CLASSES = []
 DEVICE = "cuda"

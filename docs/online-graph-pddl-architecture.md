@@ -129,7 +129,7 @@ snapshot(min_obs=3) -> SceneGraph
 
 Replace dataset-index coupling with `FrameSource.next()`, which returns a `Frame` or `None`. Mapping loop stays the same. If the mapper is slower than the camera, drop oldest frames — never block VSLAM.
 
-Live USB/ROS wiring, conda vs Jazzy, and what to swap on a robot: [`ros-ingest.md`](ros-ingest.md). Unix sockets are only an interpreter bridge (conda 3.10 cannot import Jazzy `rclpy`). The robot bus is ROS topics; YOLO/CLIP/fuse only see `Frame`.
+Live USB/ROS wiring and what to swap on a robot: [`ros-ingest.md`](ros-ingest.md). `rclpy` runs in the mapper process (Humble Docker). The robot bus is ROS topics; YOLO/CLIP/fuse only see `Frame`.
 
 ### Snapshot JSON the LM actually sees
 
@@ -175,7 +175,7 @@ Each phase should be shippable on Replica/Record3D without the robot. Later phas
 
 - [ ] **Phase 0 — Headless in-memory mapper.** Force `save_pcd` / json / detections / rerun / wandb off. Stop stream JPEG writes. Strip `mask` / `xyxy` / `color_path` from nodes after CLIP. Confirm RAM stays flat over a long Replica run.
 - [x] **Phase 1 — FrameSource interface.** `Frame` + depth-1 `LatestFrameSlot`. USB (`UsbRecord3DFrameSource`) and ROS (`RosRgbDPoseSource` on color/depth/K/pose). Mapping loop calls `next()`; producer never blocks. Offline dataset FrameSource is still the old indexed loader, not this interface.
-- [x] **Phase 2 — `GroundingService.find()`.** Lock, copy `clip_ft` + metadata, cosine search, filter `min_obs`. Unix socket + ROS **service** `/conceptgraph/find` (not an action). `snapshot()` / PDDL still later. See [`ros-ingest.md`](ros-ingest.md).
+- [x] **Phase 2 — `GroundingService.find()`.** Lock, copy `clip_ft` + metadata, cosine search, filter `min_obs`. In-process ROS **service** `/conceptgraph/find` (not an action). `snapshot()` / PDDL still later. See [`ros-ingest.md`](ros-ingest.md).
 - [ ] **Phase 3 — PlannerSnapshot.** After merge: filter `min_obs`, resolve type via a closed label map, compute geometric on/in/adjacent from AABBs, emit JSON. No CLIP vectors, no pcds. Golden tests on Replica room2 vs hand-labeled predicates.
 - [ ] **Phase 4 — LM adapter (separate module).** Prompt: domain predicates + snapshot JSON → PDDL problem. Do not bake planner-specific syntax into `slam/`. Version the snapshot schema. Evaluate with a frozen map first, then live.
 - [ ] **Phase 5 — Optional.** Move detect+CLIP to a worker process if frame time is still over budget. Only after Phases 0–2 are measured. ROS2/ZMQ wrap of `find` / `snapshot` if other nodes need it.

@@ -11,7 +11,7 @@ import torch.nn.functional as F
 
 # --- edit these ---
 MAP_PATH = Path(
-    "/home/blinky/ZJ-WS/concept-graphs/Record3D/apartment_living_room_preprocessed/exps/yoloe_pf_exp_apt/pcd_yoloe_pf_exp_apt.pkl.gz"
+    "/ws/Record3D/apartment_living_room_preprocessed/exps/yoloe_pf_exp_apt/pcd_yoloe_pf_exp_apt.pkl.gz"
 )
 DEVICE = "cuda"
 MIN_OBS = 3

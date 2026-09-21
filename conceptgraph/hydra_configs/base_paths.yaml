@@ -1,4 +1,4 @@
 # Main paths
-repo_root: /home/zijieli/concept-graphs
+repo_root: /ws #/home/blinky/ZJ-WS/concept-graphs
 # data_root: /home/zijieli/concept-graphs/data
-data_root: /home/zijieli/Downloads
+data_root: /ws #/home/blinky/ZJ-WS/concept-graphs

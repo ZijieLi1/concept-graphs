@@ -1,6 +1,8 @@
+import time
+from threading import Event
+
 import numpy as np
 from record3d import Record3DStream
-from threading import Event
 
 import cv2
 import os
@@ -29,16 +31,33 @@ class DemoApp:
     def on_stream_stopped(self):
         print('Stream stopped')
 
-    def connect_to_device(self, dev_idx):
+    def connect_to_device(self, dev_idx, timeout_s: float = 20.0):
         print('Searching for devices')
-        devs = Record3DStream.get_connected_devices()
+        deadline = time.monotonic() + float(timeout_s)
+        devs = []
+        while True:
+            devs = Record3DStream.get_connected_devices()
+            if len(devs) > int(dev_idx):
+                break
+            remain = deadline - time.monotonic()
+            if remain <= 0:
+                break
+            print(
+                f"0 device(s) found — waiting for usbmuxd ({remain:.0f}s). "
+                "Plug in, unlock, trust, Record3D USB streaming."
+            )
+            time.sleep(min(0.5, remain))
         print('{} device(s) found'.format(len(devs)))
         for dev in devs:
             print('\tID: {}\n\tUDID: {}\n'.format(dev.product_id, dev.udid))
 
         if len(devs) <= dev_idx:
-            raise RuntimeError('Cannot connect to device #{}, try different index.'
-                               .format(dev_idx))
+            raise RuntimeError(
+                'Cannot connect to device #{}, try different index. '
+                'Plug in the iPhone, trust this computer, start Record3D USB streaming. '
+                'If this is Docker, recreate the container so /host-run (usbmuxd) is mounted.'
+                .format(dev_idx)
+            )
 
         dev = devs[dev_idx]
         self.session = Record3DStream()
