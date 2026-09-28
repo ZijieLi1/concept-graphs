@@ -62,7 +62,16 @@ ros_camera_info_topic: /record3d/color/camera_info
 ros_pose_topic: /record3d/pose
 ```
 
-Point those four names at the robot. The mapper command is unchanged: `ingest=ros`.
+Point those four names at the robot. A topic ending in `/compressed` or `/compressedDepth` is `sensor_msgs/CompressedImage`; anything else is raw `Image`. HSR:
+
+```yaml
+ros_rgb_topic: /head_rgbd_sensor/rgb/image_rect_color/compressed
+ros_depth_topic: /head_rgbd_sensor/depth_registered/image_rect_raw/compressedDepth
+ros_camera_info_topic: /head_rgbd_sensor/rgb/camera_info
+ros_pose_topic: /hsr/cam_pose
+```
+
+Do not use `/compressed` for depth (8-bit JPEG). Pose is `geometry_msgs/PoseStamped` (`T_wc` optical). On the HSR, `python3 /ws/scripts/report_camera_pose.py` publishes `/hsr/cam_pose`. RGB/depth/pose stamps will not match exactly; `ros_sync_slop` (default 0.1 s) uses ApproximateTime. Point hydra `ros_*_topic` at record3d or HSR as needed. The mapper command is unchanged: `ingest=ros`.
 
 ## Frame / ROS contract
 
@@ -70,13 +79,13 @@ Publishers (phone today, robot later) must provide:
 
 | Field | Meaning |
 | --- | --- |
-| color | rectified BGR8 (or RGB8) |
-| depth | registered to color, meters (`32FC1`) or millimetres (`16UC1`) |
+| color | rectified BGR8 (or RGB8), or JPEG `CompressedImage` on `…/compressed` |
+| depth | registered to color, meters (`32FC1`) or millimetres (`16UC1`), or PNG `compressedDepth` |
 | `CameraInfo.k` | pinhole of that color image (distortion ignored — send undistorted/rectified images) |
 | pose | `T_wc`: OpenCV optical axes (x right, y down, z forward), world ← camera. Not `camera_link` (x forward, z up). Phone node applies the ARKit Y/Z flip **before** publish. |
 | QoS | BEST_EFFORT, keep-last 1 |
 
-Phone stamps all four messages with the same `now()` so ExactTime sync works. A robot will not: RGB/depth come from the camera clock, pose from VSLAM/TF. ExactTime will drop frames. Before a robot, switch to ApproximateTime (or RGB-D sync + TF lookup at the RGB stamp) and drop if pose is too old.
+Phone stamps all four messages with the same `now()` so ExactTime would work. A robot will not: RGB/depth come from the camera clock, pose from TF. `ros_sync_slop > 0` (default 0.1) uses ApproximateTime. Set `ros_sync_slop: 0` for ExactTime.
 
 ## Drop-oldest
 

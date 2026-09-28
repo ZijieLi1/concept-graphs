@@ -10,12 +10,19 @@ defaults:
 
 # Live USB: K and resolution come from Record3DStream, not this file.
 # ingest=usb: mapper owns the phone. ingest=ros|ros2: USB is held by record3d_ros_publisher.
-# Robot: keep ingest=ros, remap these four topics. See docs/ros-ingest.md.
+# Robot: keep ingest=ros, remap these four topics. /compressed and /compressedDepth
+# are CompressedImage (auto from the suffix). See docs/ros-ingest.md.
 ingest: ros
 ros_rgb_topic: /record3d/color/image_raw
 ros_depth_topic: /record3d/depth/image_raw
 ros_camera_info_topic: /record3d/color/camera_info
 ros_pose_topic: /record3d/pose
+ros_sync_slop: 0.1
+# HSR:
+# ros_rgb_topic: /head_rgbd_sensor/rgb/image_rect_color/compressed
+# ros_depth_topic: /head_rgbd_sensor/depth_registered/image_rect_raw/compressedDepth
+# ros_camera_info_topic: /head_rgbd_sensor/rgb/camera_info
+# ros_pose_topic: /hsr/cam_pose
 
 find_enabled: !!bool True
 find_service: /conceptgraph/find

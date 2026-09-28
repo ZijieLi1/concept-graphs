@@ -7,7 +7,8 @@
 #
 # Phone USB: Record3D uses host usbmuxd, not just /dev/bus/usb.
 # One container; publisher and mapper are separate processes:
-#   docker compose run --rm conceptgraph
+#   docker compose up -d
+#   docker compose exec conceptgraph bash
 #   python3 conceptgraph/scripts/record3d_ros_publisher.py
 #   python3 slam/r3d_stream_rerun_realtime_mapping.py ingest=ros
 
@@ -29,8 +30,10 @@ services:
       NVIDIA_DRIVER_CAPABILITIES: compute,utility,graphics,display
       DISPLAY: ${DISPLAY}
       QT_X11_NO_MITSHM: "1"
-      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
-      RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+      ROS_DOMAIN_ID: "96"
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+      CYCLONEDDS_URI: file:///ws/docker/cyclonedds_profile.xml
+      BASH_ENV: /ws/docker/env.sh
       # Path (not inode) so a restarted host usbmuxd is still visible.
       USBMUXD_SOCKET_ADDRESS: UNIX:/host-run/usbmuxd
       HF_HOME: /root/.cache/huggingface
@@ -43,6 +46,7 @@ services:
       - /run:/host-run:ro
       - /var/lib/lockdown:/var/lib/lockdown:ro
     entrypoint: ["/ws/docker/entrypoint.sh"]
+    command: ["sleep", "infinity"]
     device_cgroup_rules:
       - "c 189:* rmw"
     deploy:

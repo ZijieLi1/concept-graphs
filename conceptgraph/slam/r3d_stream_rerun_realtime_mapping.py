@@ -325,6 +325,7 @@ def main(cfg: DictConfig):
                 getattr(cfg, "ros_camera_info_topic", "/record3d/color/camera_info")
             ),
             pose_topic=str(getattr(cfg, "ros_pose_topic", "/record3d/pose")),
+            sync_slop=float(getattr(cfg, "ros_sync_slop", 0.1)),
         )
     else:
         frame_source = UsbRecord3DFrameSource(app, dev_idx=0)

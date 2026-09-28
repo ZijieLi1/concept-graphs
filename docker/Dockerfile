@@ -13,7 +13,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics,display \
     ROS_DISTRO=humble
 
-# Open3D / OpenCV / Record3D USB
+# Open3D / OpenCV / Record3D USB. CycloneDDS matches the robot RMW.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-pip \
         python3-venv \
@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libusb-1.0-0 \
         libusb-1.0-0-dev \
         usbutils \
+        ros-humble-rmw-cyclonedds-cpp \
         && rm -rf /var/lib/apt/lists/*
 
 # Match the conda stack: torch 2.0.1 + CUDA 11.8. Host driver must be recent enough.
@@ -55,6 +56,11 @@ RUN . /opt/ros/humble/setup.sh && colcon build --packages-select conceptgraph_in
 
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+COPY docker/cyclonedds_profile.xml /opt/cyclonedds_profile.xml
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
+    ROS_DOMAIN_ID=96 \
+    CYCLONEDDS_URI=file:///opt/cyclonedds_profile.xml
 
 WORKDIR /ws
 ENTRYPOINT ["/entrypoint.sh"]
